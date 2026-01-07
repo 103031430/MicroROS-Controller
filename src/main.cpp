@@ -17,7 +17,7 @@
 
 // Network Configuration
 byte esp_mac[] = { 0xDE, 0xAD, 0xAF, 0x91, 0x3E, 0x69 };    // Mac address of ESP32 (Make sure its unique for each ESP32)
-IPAddress esp_ip(192, 168, 0, 12);                          // IP address of ESP32   (Make sure its unique for each ESP32)
+IPAddress esp_ip(192, 168, 0, 15);                          // IP address of ESP32   (Make sure its unique for each ESP32)
 IPAddress dns(192, 168, 0, 1);                              // DNS Server           (Modify if necessary)
 IPAddress gateway(192, 168, 0, 1);                          // Default Gateway      (Modify if necessary)
 IPAddress agent_ip(192, 168, 0, 80);                        // IP address of Micro ROS agent   (Modify if necessary)        
@@ -40,7 +40,7 @@ rcl_node_t node;
 rmw_context_t* rmw_context;
 
 // Define Node Name
-const char * node_name = "ControllerESP";
+const char * node_name = "joy";
 
 
 // Define MicroROS Subscriber and Publisher entities
@@ -67,7 +67,10 @@ void setup() {
 
   Serial.begin(115200);
   delay(1000);
+
+  while (!Serial) {}
   Serial.println("Starting Ethernet Connection... ");
+
 
 
   SPI.begin(W5500_SCK, W5500_MISO, W5500_MOSI, W5500_CS);                                   // Initialize SPI with custom pin configuration    
@@ -79,6 +82,10 @@ void setup() {
   delay(2000);
 
   connection_state = ConnectionState::WaitingForAgent;
+
+  msg.axes.data = (float *) malloc(10 * sizeof(float));
+  msg.axes.capacity = 50;
+  msg.axes.size = 100;
 
 };
 
@@ -136,26 +143,27 @@ void HandleConnectionState() {
 // This function creates/initialises all micro ros entites (Publishers, Subscribers, Executors, Nodes, Support...)
 bool CreateEntities() {
 
+  // Initialize micro-ROS allocator
   allocator = rcl_get_default_allocator();
+  //create init_options
   RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
 
   // Create node object
   RCCHECK(rclc_node_init_default(&node, node_name, "", &support));
-  RCCHECK(rclc_executor_init(&executor, &support.context, 10, &allocator)); // number of subscribers the executor handles is hard coded atm
   
   // ADD ALL YOUR PUBLISHERS AND SUBSCRIBER INITIALISATION HERE
   RCCHECK(rclc_subscription_init_default(
     &controller,
     &node,
     ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Joy),
-    "Joy"
+    node_name
   ));
 
-    msg.axes.data = (float *) malloc(10 * sizeof(float));
-    msg.axes.capacity = 10;
-    msg.axes.size = 0;
+  Serial.println("Entities created successfully");
 
-  rclc_executor_add_subscription(&executor, &controller, &msg, &ControllerCallback, ON_NEW_DATA);
+  // create executor
+  RCCHECK(rclc_executor_init(&executor, &support.context, 1, &allocator));
+  RCCHECK(rclc_executor_add_subscription(&executor, &controller, &msg, &ControllerCallback, ON_NEW_DATA));
 
   return true;
 }
@@ -171,37 +179,40 @@ void DestroyEntities() {
     RCCHECK(rcl_subscription_fini(&controller, &node));
 
 
-    rclc_executor_fini(&executor);                              // Destroy Executors
+    RCCHECK(rclc_executor_fini(&executor));                              // Destroy Executors
     RCCHECK(rcl_node_fini(&node));                              // Destroy Node
-    rclc_support_fini(&support);                                // Destroy Support
+    RCCHECK(rclc_support_fini(&support));                                // Destroy Support
 }
 
 // Error handle loop
 void error_loop() {
   Serial.println("An error has occured. Restarting...");
   delay(2000);
-  ESP.restart();
+  // ESP.restart();
 
 };
 
 // ========================================= CALLBACK FUNCTIONS ========================================= //
 // Create your callback functions here.
 
-void ControllerCallback(const void * msgin)
-{
+void ControllerCallback(const void * msgin) {
   // Cast received message to used type
   const sensor_msgs__msg__Joy * msg = (const sensor_msgs__msg__Joy *)msgin;
 
-  size_t size = msg->axes.size;
+    // size_t size = msg->axes.size;
     
-  const float * array_data = msg->axes.data;
+    // const float_t * array_data = msg->axes.data;
 
-  Serial.print("Array size: ");
-  Serial.println(size);
+    Serial.println("Cheese!");
 
-  Serial.print("Element ");
-  Serial.print(5);
-  Serial.print(": ");
-  Serial.println(array_data[4]);
+    // Serial.print("Array size: ");
+    // Serial.println(size);
+    // for(size_t i = 0; i < size; i++)
+    // {
+    //     Serial.print("Element ");
+    //     Serial.print(i);
+    //     Serial.print(": ");
+    //     Serial.println(array_data[i]);
+    // }
   
 }
